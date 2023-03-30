@@ -154,12 +154,11 @@ USING(product_id)
 
 
 SELECT sales.customer_id, sales.order_date, menu.product_name, menu.price,
-		CASE WHEN order_date < join_date THEN NULL ELSE RANK() OVER(PARTITION BY customer_id ORDER BY order_date) END AS rnk,
+		RANK() OVER(PARTITION BY customer_id member ORDER BY order_date),
 		CASE WHEN order_date >= join_date THEN 'Y' ELSE 'N' END AS Member
 FROM sales
 FULL OUTER JOIN members USING(customer_id)
 JOIN menu
 USING(product_id)
-WHERE 
 
 
