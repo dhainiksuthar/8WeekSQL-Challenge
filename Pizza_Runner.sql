@@ -694,12 +694,16 @@ SELECT order_id, pizza_id, row_,
 FROM cte5
 LEFT JOIN pizza_toppings pt ON cte5.topping_id :: INT = pt.topping_id
 GROUP BY order_id, pizza_id, row_, count
-)
+),
 
-SELECT *, order_id, CONCAT(pizza_name,' - ', final_topping) FROM cte6
+cte7 AS(
+SELECT order_id, cte6.pizza_id, row_, CONCAT(pizza_name,' - ', final_topping) AS final_topping FROM cte6
 LEFT JOIN pizza_names pn ON cte6.pizza_id = pn.pizza_id
-ORDER BY order_id
+ORDER BY order_id)
 
+SELECT order_id, pizza_id, row_, MAX(final_topping)
+FROM cte7
+GROUP BY order_id, pizza_id, row_
 
 
 
