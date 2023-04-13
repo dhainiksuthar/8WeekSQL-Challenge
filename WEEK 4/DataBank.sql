@@ -176,17 +176,46 @@ FROM (
 --Using all of the data available - how much data would have been required for each option on a monthly basis?
 
 --running customer balance column that includes the impact each transaction
+WITH cte1 AS(
+SELECT 
+	*, SUM(CASE WHEN txn_type = 'deposit' THEN txn_amount ELSE 0-txn_amount END) OVER(PARTITION BY customer_id ORDER BY txn_date) AS running_balance	
+FROM customer_transactions
+)
+
+SELECT * INTO #running_balance FROM cte1
+SELECT * FROM #running_balance;
+--customer balance at the end of each month
+
+WITH cte1 AS(
+	SELECT customer_id, DATEPART(MONTH, txn_date) AS month,
+		SUM( CASE WHEN txn_type = 'deposit' THEN txn_amount
+				ELSE 0 - txn_amount END) AS amount
+	FROM customer_transactions
+	GROUP BY customer_id, DATEPART(MONTH, txn_date)
+),
+
+cte2 AS(
+	SELECT customer_id, month, amount, amount + COALESCE(LAG(amount) OVER(PARTITION BY customer_id ORDER BY month), 0) AS closing_amount, 
+	COALESCE(LEAD(month) OVER(PARTITION BY customer_id ORDER BY month), 5) AS next_month
+	FROM cte1
+),
+
+cte3 AS(
+	SELECT customer_id, month, closing_amount, next_month
+	FROM cte2
+	UNION ALL
+	SELECT customer_id, month+1, closing_amount, next_month
+	FROM cte3
+	WHERE month < next_month-1
+)
+
+SELECT customer_id, month, closing_amount FROM cte3
+ORDER BY customer_id, month
+
+--minimum, average and maximum values of the running balance for each customer
 
 SELECT 
-	*,
-	CASE WHEN LAG(
-
---customer balance at the end of each month
-WITH cte1 AS(
-SELECT
-	customer_id, MAX(txn_date) AS 
-FROM #impact_transaction
-GROUP BY customer_id)
-
-SELECT * FROM cte1 WHERE (customer_id, 
-
+	customer_id, MIN(running_balance) OVER(PARTITION BY customer_id) AS minimum,
+	MAX(running_balance) OVER(PARTITION BY customer_id) AS maximum,
+	AVG(running_balance) OVER(PARTITION BY customer_id) AS average
+FROM #running_balance;
