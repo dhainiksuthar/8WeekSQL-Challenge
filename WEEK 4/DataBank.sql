@@ -219,3 +219,33 @@ SELECT
 	MAX(running_balance) OVER(PARTITION BY customer_id) AS maximum,
 	AVG(running_balance) OVER(PARTITION BY customer_id) AS average
 FROM #running_balance;
+
+
+
+--D. Extra Challenge
+--Data Bank wants to try another option which is a bit more difficult to implement - they want to calculate data growth using an interest calculation, just 
+--like in a traditional savings account you might have with a bank.
+
+--If the annual interest rate is set at 6% and the Data Bank team wants to reward its customers by increasing their data allocation based off the interest 
+--calculated on a daily basis at the end of each day, how much data would be required for this option on a monthly basis?
+
+--Special notes:
+
+--Data Bank wants an initial calculation which does not allow for compounding interest, however they may also be interested in a daily compounding 
+--interest calculation so you can try to perform this calculation if you have the stamina!
+
+WITH cte1 AS(
+	SELECT
+		customer_id, txn_date, running_balance, LEAD(txn_date) OVER(PARTITION BY customer_id ORDER BY txn_date) AS next_txn_date
+	FROM
+		#running_balance),
+cte2 AS(
+SELECT
+	customer_id, DATEPART(MONTH, txn_date) AS month, running_balance*(0.06/365)*DATEDIFF(DAY, txn_date, COALESCE(next_txn_date, '2020-04-30')) AS Interest
+FROM cte1)
+
+SELECT 
+	month, SUM(interest)
+FROM cte2
+GROUP BY month
+ORDER BY month;
