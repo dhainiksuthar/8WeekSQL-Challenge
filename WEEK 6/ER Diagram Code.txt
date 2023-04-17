@@ -1,0 +1,47 @@
+// Use DBML to define your database structure
+// Docs: https://www.dbml.org/docs
+
+
+Table users {
+  user_id integer [primary key]
+  cookie_id varchar
+  start_date TIMESTAMP
+}
+
+Table Events {
+  visit_id integer [primary key]
+  cookie_id  varchar
+  page_id integer
+  event_type integer
+  sequence_number integer
+  event_time timestamp
+}
+
+Table Event_identifier{
+  event_type integer [primary key]
+  event_name varchar
+}
+
+Table Campaign_identifier{
+  campaign_id integer [primary key]
+  products varchar
+  compaign_name varchar
+  start_date timestamp
+  end_date timestamp
+}
+
+Table page_hierarchy{
+  page_id integer [primary key]
+  page_name varchar
+  product_category varchar
+  product_id integer
+}
+
+// Ref: posts.user_id > users.id // many-to-one
+Ref: Event_identifier.event_type > Events.event_type
+
+Ref: Events.cookie_id > users.cookie_id
+
+Ref: page_hierarchy.page_id > Events.page_id
+
+// Ref: users.id < follows.followed_user_id
