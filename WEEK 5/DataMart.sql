@@ -180,7 +180,7 @@ GROUP BY
 ORDER BY calendar_year
 
 
-												--3. Before & After Analysis
+												--C. Before & After Analysis
 
 --This technique is usually used when we inspect an important event and want to inspect the impact before and after a certain point in time.
 
@@ -233,7 +233,140 @@ FROM cte1;
 
 --How do the sale metrics for these 2 periods before and after compare with the previous years in 2018 and 2019?
 
+--Part 1: How do the sale metrics for 4 weeks before and after compare with the previous years in 2018 and 2019?
+
+DECLARE @week INT;
+SELECT @week = week_number FROM data_mart.weekly_sales_cleaned WHERE week_date = '2020-06-15';
+
+WITH cte1 AS(SELECT calendar_year,
+	SUM(CASE
+		WHEN week_number BETWEEN @week-4 AND @week-1 THEN sales
+		END) AS before_change,
+	SUM(CASE
+		WHEN week_number BETWEEN @week AND @week+3 THEN sales
+		END) AS after_change
+FROM data_mart.weekly_sales_cleaned      
+GROUP BY calendar_year)
+
+SELECT calendar_year, before_change, after_change,   after_change - before_change AS variance, 
+	ROUND(100.0 * (after_change - before_change) / before_change,2) AS percentage
+FROM cte1; 
+
+--Part 2: How do the sale metrics for 12 weeks before and after compare with the previous years in 2018 and 2019?
+
+DECLARE @week INT;
+SELECT @week = week_number FROM data_mart.weekly_sales_cleaned WHERE week_date = '2020-06-15';
+
+WITH cte1 AS(SELECT calendar_year,
+	SUM(CASE 
+		WHEN week_number BETWEEN @week-12 AND @week-1 THEN sales
+		END) AS before_change,
+	SUM(CASE
+		WHEN week_number BETWEEN @week AND @week+11 THEN sales
+		END) AS after_change
+FROM data_mart.weekly_sales_cleaned      
+GROUP BY calendar_year)
+
+SELECT calendar_year, before_change, after_change,   after_change - before_change AS variance, 
+	ROUND(100.0 * (after_change - before_change) / before_change,2) AS percentage
+FROM cte1;
 
 
+--D Bonus Question
+--Which areas of the business have the highest negative impact in sales metrics performance in 2020 for the 12 week before and after period?
+
+--region
+--platform
+--age_band
+--demographic
+--customer_type
+--Do you have any further recommendations for Danny’s team at Data Mart or any interesting insights based off this analysis?
+
+--Part 1 region
+DECLARE @week_date DATE = '2020-06-15';
+
+WITH cte1 AS(SELECT region,
+	SUM(CASE
+		WHEN week_date BETWEEN DATEADD(WEEK, -12, @week_date) AND DATEADD(WEEK, -1, @week_date) THEN sales
+		END) AS before_change,
+	SUM(CASE
+		WHEN week_date BETWEEN @week_date AND DATEADD(WEEK, 11, @week_date) THEN sales
+		END) AS after_change
+FROM data_mart.weekly_sales_cleaned      
+GROUP BY region)
+
+SELECT region, before_change, after_change,   after_change - before_change AS variance, 
+	CAST(100.0 * (after_change - before_change) / before_change AS DECIMAL(4,2)) AS percentage
+FROM cte1;
+
+--Part 2 platform
+
+DECLARE @week_date DATE = '2020-06-15';
+
+WITH cte1 AS(SELECT platform,
+	SUM(CASE
+		WHEN week_date BETWEEN DATEADD(WEEK, -12, @week_date) AND DATEADD(WEEK, -1, @week_date) THEN sales
+		END) AS before_change,
+	SUM(CASE
+		WHEN week_date BETWEEN @week_date AND DATEADD(WEEK, 11, @week_date) THEN sales
+		END) AS after_change
+FROM data_mart.weekly_sales_cleaned      
+GROUP BY platform)
+
+SELECT platform, before_change, after_change,   after_change - before_change AS variance, 
+	CAST(100.0 * (after_change - before_change) / before_change AS DECIMAL(4,2)) AS percentage
+FROM cte1;
+
+--Part 3 age_band
+DECLARE @week_date DATE = '2020-06-15';
+
+WITH cte1 AS(SELECT age_band,
+	SUM(CASE
+		WHEN week_date BETWEEN DATEADD(WEEK, -12, @week_date) AND DATEADD(WEEK, -1, @week_date) THEN sales
+		END) AS before_change,
+	SUM(CASE
+		WHEN week_date BETWEEN @week_date AND DATEADD(WEEK, 11, @week_date) THEN sales
+		END) AS after_change
+FROM data_mart.weekly_sales_cleaned      
+GROUP BY age_band)
+
+SELECT age_band, before_change, after_change,   after_change - before_change AS variance, 
+	CAST(100.0 * (after_change - before_change) / before_change AS DECIMAL(4,2)) AS percentage
+FROM cte1;
+
+--Part 4 demographic
+
+DECLARE @week_date DATE = '2020-06-15';
+
+WITH cte1 AS(SELECT demographic,
+	SUM(CASE
+		WHEN week_date BETWEEN DATEADD(WEEK, -12, @week_date) AND DATEADD(WEEK, -1, @week_date) THEN sales
+		END) AS before_change,
+	SUM(CASE
+		WHEN week_date BETWEEN @week_date AND DATEADD(WEEK, 11, @week_date) THEN sales
+		END) AS after_change
+FROM data_mart.weekly_sales_cleaned      
+GROUP BY demographic)
+
+SELECT demographic, before_change, after_change,   after_change - before_change AS variance, 
+	CAST(100.0 * (after_change - before_change) / before_change AS DECIMAL(4,2)) AS percentage
+FROM cte1;
+
+--Part 5 customer_type
+DECLARE @week_date DATE = '2020-06-15';
+
+WITH cte1 AS(SELECT customer_type,
+	SUM(CASE
+		WHEN week_date BETWEEN DATEADD(WEEK, -12, @week_date) AND DATEADD(WEEK, -1, @week_date) THEN sales
+		END) AS before_change,
+	SUM(CASE
+		WHEN week_date BETWEEN @week_date AND DATEADD(WEEK, 11, @week_date) THEN sales
+		END) AS after_change
+FROM data_mart.weekly_sales_cleaned      
+GROUP BY customer_type)
+
+SELECT customer_type, before_change, after_change,   after_change - before_change AS variance, 
+	CAST(100.0 * (after_change - before_change) / before_change AS DECIMAL(4,2)) AS percentage
+FROM cte1;
 
 SELECT * FROM data_mart.weekly_sales_cleaned
