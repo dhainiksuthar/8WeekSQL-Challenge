@@ -79,14 +79,151 @@ GROUP BY ph.product_category
 
 -- 9. What are the top 3 products by purchases?
 
-SELECT ph.product_id, COUNT(*) as count_cart
-FROM clique_bait.events e
-LEFT JOIN clique_bait.event_identifier ei ON e.event_type = ei.event_type
-LEFT JOIN clique_bait.page_hierarchy ph ON e.page_id = ph.page_id
-WHERE event_name = 'Purchase'
-GROUP BY ph.product_id
+SELECT TOP 3
+	page_name, COUNT(*) AS count
+FROM clique_bait.events AS e
+JOIN clique_bait.page_hierarchy AS ph ON e.page_id = ph.page_id
+JOIN clique_bait.event_identifier AS ei ON e.event_type = ei.event_type
+WHERE event_name = 'Add to Cart' AND visit_id IN (
+			SELECT visit_id  FROM clique_bait.events AS e
+			JOIN clique_bait.event_identifier AS ei ON e.event_type = ei.event_type
+			WHERE ei.event_name = 'Purchase')
+GROUP BY page_name
+ORDER BY count DESC;
 
+
+										--3. Product Funnel Analysis
+--Using a single SQL query - create a new output table which has the following details:
+
+--How many times was each product viewed?
+--How many times was each product added to cart?
+--How many times was each product added to a cart but not purchased (abandoned)?
+--How many times was each product purchased?
+--Additionally, create another table which further aggregates the data for the above points but this time for each product category instead of individual products.
+
+WITH cte1 AS(
+SELECT page_name,
+		SUM(CASE
+			WHEN event_name = 'Page View' AND product_id IS NOT NULL THEN 1 ELSE 0 END) AS views,
+		SUM(CASE
+			WHEN event_name = 'Add to Cart' THEN 1 ELSE 0 END) AS add_to_cart
+FROM clique_bait.events AS e
+JOIN clique_bait.event_identifier AS ei ON e.event_type = ei.event_type
+JOIN clique_bait.page_hierarchy AS ph ON e.page_id = ph.page_id
+GROUP BY page_name),
+
+cte2 AS(
+	SELECT page_name, COUNT(*) as carted_but_not_purchased
+	FROM clique_bait.events AS e
+	JOIN clique_bait.event_identifier AS ei ON e.event_type = ei.event_type
+	JOIN clique_bait.page_hierarchy AS ph ON e.page_id = ph.page_id
+	WHERE event_name = 'Add to Cart' AND visit_id NOT IN 
+								(SELECT 
+									visit_id 
+									FROM clique_bait.events e
+									JOIN clique_bait.event_identifier AS ei ON e.event_type = ei.event_type 
+									WHERE event_name = 'Purchase'
+								)
+	GROUP BY page_name
+)
+
+
+SELECT 
+	cte1.page_name, 
+	views, 
+	add_to_cart, 
+	carted_but_not_purchased, 
+	add_to_cart - carted_but_not_purchased AS purchased
+INTO #product_details
+FROM cte1 
+JOIN cte2 ON cte1.page_name = cte2.page_name;
+GO
+
+SELECT * FROM #product_details;
+
+SELECT 
+	product_category,
+	sum(p.views) [view],
+	sum(add_to_cart) add_to_cart,
+	sum(carted_but_not_purchased) carted_but_not_purchased,
+	sum(purchased) purchased
+	INTO #product_category_details
+FROM #product_details p
+JOIN clique_bait.page_hierarchy ph
+ON p.page_name = ph.page_name
+GROUP BY product_category;
+GO
+
+SELECT * FROM #product_category_details;
+
+
+--Use your 2 new output tables - answer the following questions:
+
+--Which product had the most views, cart adds and purchases?
+
+WITH cte1 AS(
+	SELECT 
+		page_name,
+		RANK() OVER(ORDER BY views DESC) views_rank,
+		RANK() OVER(ORDER BY add_to_cart DESC) cart_rank,
+		RANK() OVER(ORDER BY purchased DESC) purchase_rank
+	FROM #product_details
+)
+SELECT page_name,
+	'most_viewed' AS Product
+FROM cte1
+WHERE views_rank = 1
+UNION
+SELECT page_name,
+	'most_carted' AS Product
+FROM cte1
+WHERE cart_rank = 1
+UNION
+SELECT page_name,
+	'most_purchased' AS Product
+FROM cte1
+WHERE purchase_rank = 1
+
+--Which product was most likely to be abandoned?
+
+WITH cte1 AS(
+	SELECT page_name, RANK() OVER(ORDER BY carted_but_not_purchased DESC) AS ran
+	FROM #product_details
+)
+SELECT page_name 
+FROM cte1 WHERE ran = 1
+
+--Which product had the highest view to purchase percentage?
+
+SELECT TOP 1 page_name, CAST(purchased*100.0/views AS DECIMAL(4,2)) AS Percentage FROM #product_details
+ORDER BY Percentage DESC
+
+--What is the average conversion rate from view to cart add?
+
+SELECT CAST(AVG(add_to_cart*100.0/views) AS DECIMAL(4,2)) AS avg_view_cart_percentage
+FROM #product_details
+
+--What is the average conversion rate from cart add to purchase?
+
+SELECT CAST(AVG(purchased*100.0/add_to_cart) AS DECIMAL(4,2)) AS avg_cart_purchase_percentage
+FROM #product_details
+
+
+
+
+SELECT *
+FROM clique_bait.events AS e
+JOIN clique_bait.event_identifier AS ei ON e.event_type = ei.event_type
+JOIN clique_bait.page_hierarchy AS ph ON e.page_id = ph.page_id
+
+
+
+SELECT * FROM clique_bait.events
 
 SELECT * FROM clique_bait.event_identifier
 
 SELECT * FROM clique_bait.page_hierarchy
+
+SELECT * FROM clique_bait.campaign_identifier
+
+SELECT * FROM clique_bait.users
