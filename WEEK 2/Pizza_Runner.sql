@@ -360,18 +360,57 @@ ORDER BY order_id;
 -- C5. Generate an alphabetically ordered comma separated ingredient list for each pizza order from the customer_orders table and add a 2x in front of any relevant ingredients
 -- For example: "Meat Lovers: 2xBacon, Beef, ... , Salami"
 
-WITH cte1 AS
-	(
-	SELECT co.order_id, co.pizza_id, pn.pizza_name, UNNEST(STRING_TO_ARRAY(pr.toppings, ',')) :: INT AS topping_id FROM customer_orders co
-	LEFT JOIN pizza_names pn ON co.pizza_id = pn.pizza_id
-	LEFT JOIN pizza_recipes pr ON co.pizza_id = pr.pizza_id
-	ORDER BY order_id, topping_id	
-	)
+create or replace function array_diff(array1 anyarray, array2 anyarray)
+returns anyarray language sql immutable as $$
+    select coalesce(array_agg(elem), '{}')
+    from unnest(array1) elem
+    where elem <> all(array2)
+$$;
 
-SELECT cte1.order_id, cte1.pizza_id, MIN(pizza_name), STRING_AGG(topping_name, ',') as all_topping FROM cte1 
-LEFT JOIN pizza_toppings pt ON cte1.topping_id = pt.topping_id
-GROUP BY order_id, pizza_id 
+WITH cte1 AS(
+SELECT *, ROW_NUMBER() OVER(PARTITION BY order_id, pizza_id) AS row_ FROM customer_orders ORDER BY order_id),
 
+cte2 AS(
+SELECT order_id, cte1.pizza_id,row_, STRING_TO_ARRAY(exclusions, ', ') AS exclusions, STRING_TO_ARRAY(extras, ', ') as extras, STRING_TO_ARRAY(toppings, ', ') AS toppings FROM cte1
+LEFT JOIN pizza_recipes AS pr ON cte1.pizza_id = pr.pizza_id),
+
+cte3 AS(
+SELECT order_id, pizza_id, row_, toppings, extras,
+	CASE 
+		WHEN exclusions IS NOT NULL THEN array_diff(toppings, exclusions)
+		ELSE toppings
+	END AS left_toppings
+FROM cte2),
+
+cte4 AS(
+SELECT order_id, pizza_id, row_, toppings, extras, ARRAY_CAT(toppings, extras)
+FROM cte3),
+
+cte5 AS(
+SELECT order_id, pizza_id, row_, UNNEST(array_cat) AS topping_id, COUNT(*)
+FROM cte4
+GROUP BY order_id, pizza_id, row_, topping_id),
+
+
+cte6 AS(
+SELECT order_id, pizza_id, row_,
+	CASE
+		WHEN count > 1 THEN STRING_AGG(CONCAT(count, topping_name), ', ')
+		ELSE STRING_AGG(topping_name, ', ')
+	END AS final_topping
+FROM cte5
+LEFT JOIN pizza_toppings pt ON cte5.topping_id :: INT = pt.topping_id
+GROUP BY order_id, pizza_id, row_, count
+),
+
+cte7 AS(
+SELECT order_id, cte6.pizza_id, row_, CONCAT(pizza_name,' - ', final_topping) AS final_topping FROM cte6
+LEFT JOIN pizza_names pn ON cte6.pizza_id = pn.pizza_id
+ORDER BY order_id)
+
+SELECT order_id, pizza_id, row_, MAX(final_topping)
+FROM cte7
+GROUP BY order_id, pizza_id, row_
 
 
 
@@ -536,57 +575,7 @@ FROM
   pizza_runner.pizza_names AS n
   JOIN pizza_runner.pizza_recipes AS r ON n.pizza_id = r.pizza_id
 
-create or replace function array_diff(array1 anyarray, array2 anyarray)
-returns anyarray language sql immutable as $$
-    select coalesce(array_agg(elem), '{}')
-    from unnest(array1) elem
-    where elem <> all(array2)
-$$;
 
-WITH cte1 AS(
-SELECT *, ROW_NUMBER() OVER(PARTITION BY order_id, pizza_id) AS row_ FROM customer_orders ORDER BY order_id),
-
-cte2 AS(
-SELECT order_id, cte1.pizza_id,row_, STRING_TO_ARRAY(exclusions, ', ') AS exclusions, STRING_TO_ARRAY(extras, ', ') as extras, STRING_TO_ARRAY(toppings, ', ') AS toppings FROM cte1
-LEFT JOIN pizza_recipes AS pr ON cte1.pizza_id = pr.pizza_id),
-
-cte3 AS(
-SELECT order_id, pizza_id, row_, toppings, extras,
-	CASE 
-		WHEN exclusions IS NOT NULL THEN array_diff(toppings, exclusions)
-		ELSE toppings
-	END AS left_toppings
-FROM cte2),
-
-cte4 AS(
-SELECT order_id, pizza_id, row_, toppings, extras, ARRAY_CAT(toppings, extras)
-FROM cte3),
-
-cte5 AS(
-SELECT order_id, pizza_id, row_, UNNEST(array_cat) AS topping_id, COUNT(*)
-FROM cte4
-GROUP BY order_id, pizza_id, row_, topping_id),
-
-
-cte6 AS(
-SELECT order_id, pizza_id, row_,
-	CASE
-		WHEN count > 1 THEN STRING_AGG(CONCAT(count, topping_name), ', ')
-		ELSE STRING_AGG(topping_name, ', ')
-	END AS final_topping
-FROM cte5
-LEFT JOIN pizza_toppings pt ON cte5.topping_id :: INT = pt.topping_id
-GROUP BY order_id, pizza_id, row_, count
-),
-
-cte7 AS(
-SELECT order_id, cte6.pizza_id, row_, CONCAT(pizza_name,' - ', final_topping) AS final_topping FROM cte6
-LEFT JOIN pizza_names pn ON cte6.pizza_id = pn.pizza_id
-ORDER BY order_id)
-
-SELECT order_id, pizza_id, row_, MAX(final_topping)
-FROM cte7
-GROUP BY order_id, pizza_id, row_
 
 
 
