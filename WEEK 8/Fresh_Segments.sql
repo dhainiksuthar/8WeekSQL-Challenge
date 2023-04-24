@@ -34,7 +34,7 @@ WHERE interest_id NOT IN (
 );
 
 SELECT COUNT(*) [ids not in matrics]
-FROM fresh_segments.interest_map AS 
+FROM fresh_segments.interest_map 
 WHERE id NOT IN (
 	SELECT interest_id
 	FROM fresh_segments.interest_metrics
@@ -230,27 +230,64 @@ WHERE formin = 1 OR formax = 1;
 
 -- D1. What is the top 10 interests by the average composition for each month?
 
-SELECT TOP 10
-	month_year, interest_name,
-	ROUND(composition/index_value, 2) AS avgcomposition
-FROM fresh_segments.interest_metrics metrics
-JOIN fresh_segments.interest_map map
-ON metrics.interest_id = map.id
-ORDER BY avgcomposition DESC
+DROP TABLE IF EXISTS #top_interest_per_month;
+WITH cte1 AS(
+	SELECT 
+		month_year, interest_name,
+		composition*1.0/index_value avgcomposition,
+		RANK() OVER(PARTITION BY month_year ORDER BY composition*1.0/index_value DESC) as rnk
+	FROM
+		#filtered_data metrics
+	JOIN fresh_segments.interest_map map
+	ON metrics.interest_id = map.id
+)
+SELECT *
+INTO #top_interest_per_month
+FROM cte1
+WHERE rnk <= 10
+ORDER BY month_year;
+SELECT * FROM #top_interest_per_month;
+
 
 -- D2. For all of these top 10 interests - which interest appears the most often?
 
+SELECT 
+	interest_name, COUNT(*) AS count
+FROM #top_interest_per_month
+GROUP BY interest_name
+ORDER BY count DESC;
+
+
 -- D3. What is the average of the average composition for the top 10 interests for each month?
+
+SELECT month_year, CAST(AVG(avgcomposition) AS NUMERIC(4,2)) AS avgcompostion_per_month
+FROM #top_interest_per_month
+GROUP BY month_year;
+
 
 -- D4. What is the 3 month rolling average of the max average composition value from September 2018 to August 2019 and include the 
 --previous top ranking interests in the same output shown below.
 
+WITH cte AS (	
+	SELECT month_year, interest_name, 
+		avgcomposition [max_index_composition],
+		CAST(AVG(avgcomposition) OVER(ORDER BY month_year ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS decimal(10,2)) [3_month_moving_avg],
+		CONCAT(LAG(interest_name) OVER (ORDER BY month_year), ': ', LAG(avgcomposition) OVER (ORDER BY month_year)) [1_month_ago],
+		CONCAT(LAG(interest_name, 2) OVER (ORDER BY month_year) , ': ', LAG(avgcomposition, 2) OVER (ORDER BY month_year)) [2_month_ago]
+	FROM #top_interest_per_month 
+	WHERE rnk = 1
+	)
+SELECT * 
+FROM cte
+WHERE month_year BETWEEN '2018-09-01' AND '2019-08-01'
+ORDER BY month_year;
+
 -- D5. Provide a possible reason why the max average composition might change from month to month? Could it signal something is 
 --not quite right with the overall business model for Fresh Segments?
 
-
-SELECT * FROM fresh_segments.interest_metrics;
-
-SELECT * FROM fresh_segments.interest_map;
-
-SELECT * FROM fresh_segments.#filtered_data;
+/*
+I think it's because of seasonal. People make plans for trips when summer is coming which is time of holiday.
+Other than that time work is first priority. So this is because of change in season.
+Another possible reason can be that interests' may have changed time to time. 
+So, because of this reason composition might change from month to month.
+*/
